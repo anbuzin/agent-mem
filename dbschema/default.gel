@@ -1,3 +1,62 @@
 module default {
+    type Message {
+        llm_role: str;
+        body: str;
+        created_at: datetime {
+            default := datetime_current();
+        };
+        is_evicted: bool {
+            default := false;
+        };
+    }
 
+    type Chat {
+        multi archive: Message;
+        multi history := (
+            select .archive filter not .is_evicted
+        );
+    }
+
+    function request_summary(chat_id: uuid, cutoff: datetime) -> net::http::ScheduledRequest 
+    using (
+        with 
+            chat := assert_exists((select Chat filter .id = chat_id)),
+            messages := (select chat.history filter .created_at <= cutoff),
+        select net::http::schedule_request(
+            'http://127.0.0.1:8000/structurize',
+            method := net::http::Method.POST,
+            headers := [('Content-Type', 'application/json')],
+            body := to_bytes(
+                to_str(
+                    json_object_pack(
+                        {
+                            ("messages", <json>messages),
+                            ("cutoff", <json>cutoff)
+                        }
+                    )
+                )
+            )
+        )
+    );
+
+    function insert_summary(chat_id: uuid, summary: str, cutoff: datetime) -> Chat 
+    using (
+        with 
+            chat := assert_exists((select Chat filter .id = chat_id)),
+            evicted_messages := (
+                update chat.archive 
+                filter .created_at <= cutoff 
+                set {
+                    is_evicted := true
+                } 
+            ),
+            summary_message := (insert Message {
+                llm_role := "system",
+                body := summary,
+                created_at := cutoff,
+            }),
+        update chat set {
+            archive := distinct (.archive union summary_message)
+        } 
+    );
 }
