@@ -22,15 +22,20 @@ module default {
         with 
             chat := assert_exists((select Chat filter .id = chat_id)),
             messages := (select chat.history filter .created_at <= cutoff),
+            messages_body := array_agg((
+                select messages.body
+                order by messages.created_at
+            ))
         select net::http::schedule_request(
-            'http://127.0.0.1:8000/structurize',
+            'http://127.0.0.1:8000/summarize',
             method := net::http::Method.POST,
             headers := [('Content-Type', 'application/json')],
             body := to_bytes(
                 to_str(
                     json_object_pack(
                         {
-                            ("messages", <json>messages),
+                            ("chat_id", <json>chat_id),
+                            ("messages", <json>messages_body),
                             ("cutoff", <json>cutoff)
                         }
                     )
