@@ -1,4 +1,8 @@
 module default {
+    global summary_threshold: int64 {
+        default := 3;
+    };
+
     type Message {
         llm_role: str;
         body: str;
@@ -15,6 +19,14 @@ module default {
         multi history := (
             select .archive filter not .is_evicted
         );
+        
+        trigger summarize after insert, update for each do (
+            select request_summary(
+                __new__.id,
+                datetime_current()
+            ) if (count(__new__.history) > global summary_threshold)
+            else {}
+        )
     }
 
     function request_summary(chat_id: uuid, cutoff: datetime) -> net::http::ScheduledRequest 
