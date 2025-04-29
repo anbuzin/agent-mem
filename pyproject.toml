@@ -10,6 +10,7 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.115.12",
     "gel>=3.0.1",
+    "streamlit>=1.44.1",
 ]
 
 [project.scripts]

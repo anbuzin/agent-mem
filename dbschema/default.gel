@@ -21,9 +21,15 @@ module default {
         );
         
         trigger summarize after insert, update for each do (
+            with cutoff_messages := (
+                select __new__.history order by .created_at desc limit global summary_threshold
+            ),
+            cutoff := (
+                select cutoff_messages limit 1
+            ).created_at,
             select request_summary(
                 __new__.id,
-                datetime_current()
+                assert_exists(cutoff)
             ) if (count(__new__.history) > global summary_threshold)
             else {}
         )
