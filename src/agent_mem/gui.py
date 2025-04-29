@@ -7,18 +7,27 @@ from agent_mem.common.types import Message, Chat
 
 API_URL = "http://127.0.0.1:8000"
 
-if "chat_id" not in st.session_state or st.session_state.chat_id is None:
-    st.session_state.chat_id = httpx.post(f"{API_URL}/chat").text[1:-1]
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-chat = httpx.get(f"{API_URL}/chat/{st.session_state.chat_id}").json()
+if "is_new_chat" not in st.session_state:
+    st.session_state.is_new_chat = True
 
-st.session_state.messages = [
-    {"role": message["role"], "content": message["content"]}
-    for message in chat["history"]
-]
+if "chat_id" not in st.session_state:
+    st.session_state.chat_id = None
+
+if not st.session_state.is_new_chat:
+    assert st.session_state.chat_id is not None
+    chat = httpx.get(f"{API_URL}/chat/{st.session_state.chat_id}").json()
+
+    st.session_state.messages = [
+        {"role": message["role"], "content": message["content"]}
+        for message in chat["history"]
+    ]
+else:
+    st.session_state.messages = []
+
 
 st.title("Simple chat")
 
@@ -30,6 +39,10 @@ if prompt := st.chat_input("What is up?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
+
+    if st.session_state.is_new_chat:
+        st.session_state.chat_id = httpx.post(f"{API_URL}/chat").text[1:-1]
+        st.session_state.is_new_chat = False
 
     with st.chat_message("assistant"):
         with httpx.stream(
@@ -49,6 +62,7 @@ chats = httpx.get(f"{API_URL}/chats").json()
 
 def set_chat(chat_id: uuid.UUID | None = None):
     st.session_state.chat_id = chat_id
+    st.session_state.is_new_chat = chat_id is None
 
 
 with st.sidebar:
