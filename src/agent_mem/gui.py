@@ -1,69 +1,44 @@
 import streamlit as st
-import requests
-import uuid
-from datetime import datetime
+import httpx
 
-# Constants
+from agent_mem.common.types import Message, Chat
+
+
 API_URL = "http://127.0.0.1:8000"
 
-# Initialize session state
 if "chat_id" not in st.session_state:
-    # Get a new chat ID from the backend
-    response = requests.post(f"{API_URL}/create_chat")
-    st.session_state.chat_id = response.json()["chat_id"]
+    st.session_state.chat_id = httpx.post(f"{API_URL}/chat").text[1:-1]
+
+if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# App title
-st.title("Chat Agent Memory Demo")
+print(st.session_state.chat_id)
+chat = httpx.get(f"{API_URL}/chat/{st.session_state.chat_id}").json()
 
-# Display chat messages
+st.session_state.messages = [
+    {"role": message["role"], "content": message["content"]}
+    for message in chat["history"]
+]
+
+st.title("Simple chat")
+
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.write(message["content"])
+        st.markdown(message["content"])
 
-# User input
-if prompt := st.chat_input("What's on your mind?"):
-    # Add user message to chat history
+if prompt := st.chat_input("What is up?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    # Display user message
     with st.chat_message("user"):
-        st.write(prompt)
-    
-    # Save user message to backend
-    requests.post(
-        f"{API_URL}/save_message",
-        json={
-            "chat_id": st.session_state.chat_id,
-            "role": "user",
-            "content": prompt
-        }
-    )
-    
-    # Get assistant response (echo in this simple case)
+        st.markdown(prompt)
+
     with st.chat_message("assistant"):
-        response = requests.post(
-            f"{API_URL}/save_message",
+        with httpx.stream(
+            "POST",
+            f"{API_URL}/message",
             json={
                 "chat_id": st.session_state.chat_id,
-                "role": "assistant",
-                "content": f"Echo: {prompt}"
-            }
-        ).json()
-        
-        st.write(response["content"])
-    
-    # Add assistant response to chat history
-    st.session_state.messages.append({"role": "assistant", "content": response["content"]})
-
-# Show chat information in sidebar
-with st.sidebar:
-    st.subheader("Chat Information")
-    st.write(f"Chat ID: {st.session_state.chat_id}")
-    
-    if st.button("Refresh Chat"):
-        # Fetch latest messages from backend
-        response = requests.get(f"{API_URL}/get_chat/{st.session_state.chat_id}")
-        messages = response.json()["messages"]
-        st.session_state.messages = [{"role": msg["role"], "content": msg["content"]} for msg in messages]
-        st.rerun() 
+                "message": {"role": "user", "content": prompt},
+            },
+        ) as response:
+            answer = st.write_stream(response.iter_text())
+    st.session_state.messages.append({"role": "assistant", "content": answer})

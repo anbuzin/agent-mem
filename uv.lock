@@ -9,6 +9,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "gel" },
+    { name = "httpx" },
     { name = "streamlit" },
 ]
 
@@ -16,6 +17,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
     { name = "gel", specifier = ">=3.0.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "streamlit", specifier = ">=1.44.1" },
 ]
 
