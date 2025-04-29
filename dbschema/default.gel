@@ -15,6 +15,9 @@ module default {
     }
 
     type Chat {
+        created_at: datetime {
+            default := datetime_current();
+        };
         multi archive: Message;
         multi history := (
             select .archive filter not .is_evicted

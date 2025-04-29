@@ -53,50 +53,52 @@ async def summarize(request: SummarizeRequest):
 
 
 @app.get("/chat/{chat_id}")
-async def get_chat(chat_id: uuid.UUID | None = None) -> Chat | list[Chat]:
-    if chat_id:
-        result = await gel_client.query_single(
-            """
-            with 
-            chat_id := <uuid>$chat_id,
-            chat := (select Chat filter .id = chat_id)
-        select assert_exists(chat) {
+async def get_chat(chat_id: uuid.UUID) -> Chat:
+    result = await gel_client.query_single(
+        """
+        with 
+        chat_id := <uuid>$chat_id,
+        chat := (select Chat filter .id = chat_id)
+    select assert_exists(chat) {
+        id,
+        archive: {
+            llm_role,
+            body,
+            created_at
+        } order by .created_at,
+        history: {
+            llm_role,
+            body,
+            created_at
+        } order by .created_at
+    }
+    """,
+        chat_id=chat_id,
+    )
+    return Chat.from_gel_result(result)
+
+
+@app.get("/chats")
+async def get_chats() -> list[Chat]:
+    result = await gel_client.query(
+        """
+        select Chat {
             id,
-            archive: {
+            history: {
                 llm_role,
                 body,
                 created_at
             } order by .created_at,
-            history: {
+            archive: {
                 llm_role,
                 body,
                 created_at
             } order by .created_at
         }
-        """,
-            chat_id=chat_id,
-        )
-        return Chat.from_gel_result(result)
-    else:
-        result = await gel_client.query(
-            """
-            select Chat {
-                id,
-                history: {
-                    llm_role,
-                    body,
-                    created_at
-                } order by .created_at,
-                archive: {
-                    llm_role,
-                    body,
-                    created_at
-                } order by .created_at
-            }
-            order by .created_at
-            """
-        )
-        return [Chat.from_gel_result(chat) for chat in result]
+        order by .created_at desc
+        """
+    )
+    return [Chat.from_gel_result(chat) for chat in result]
 
 
 @app.post("/chat")
