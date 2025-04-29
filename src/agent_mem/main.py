@@ -61,6 +61,7 @@ async def get_chat(chat_id: uuid.UUID) -> Chat:
         chat := (select Chat filter .id = chat_id)
     select assert_exists(chat) {
         id,
+        title,
         archive: {
             llm_role,
             body,
@@ -84,6 +85,7 @@ async def get_chats() -> list[Chat]:
         """
         select Chat {
             id,
+            title,
             history: {
                 llm_role,
                 body,

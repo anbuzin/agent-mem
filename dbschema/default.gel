@@ -18,6 +18,9 @@ module default {
         created_at: datetime {
             default := datetime_current();
         };
+        title: str {
+            default := "Untitled";
+        };
         multi archive: Message;
         multi history := (
             select .archive filter not .is_evicted

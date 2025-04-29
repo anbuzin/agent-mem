@@ -18,6 +18,7 @@ class Message(BaseModel):
 
 class Chat(BaseModel):
     id: uuid.UUID
+    title: str
     history: list[Message] = Field(default_factory=list)
     archive: list[Message] = Field(default_factory=list)
 
@@ -25,6 +26,7 @@ class Chat(BaseModel):
     def from_gel_result(cls, result: dict):
         return cls(
             id=result.id,
+            title=result.title,
             history=[Message.from_gel_result(msg) for msg in result.history],
             archive=[Message.from_gel_result(msg) for msg in result.archive]
         )

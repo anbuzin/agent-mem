@@ -29,6 +29,7 @@ with
     }
   )
 insert Chat {
+  title := "Python generators",
   archive := {msg1, msg2, msg3, msg4}
 };
 
@@ -88,6 +89,7 @@ with
     }
   )
 insert Chat {
+  title := "AI benefits and risks",
   archive := {msg1_evicted, msg2_evicted, msg3, msg4, summary}
 };
 
@@ -108,5 +110,6 @@ with
     }
   )
 insert Chat {
+  title := "Weather",
   archive := {msg1, msg2}
 };

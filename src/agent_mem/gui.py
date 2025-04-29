@@ -77,10 +77,9 @@ with st.sidebar:
 
     for chat in chats:
         st.button(
-            chat["id"][:21] + "..." if len(chat["id"]) > 21 else chat["id"],
+            chat["title"][:21] + "..." if len(chat["title"]) > 21 else chat["title"],
             on_click=set_chat,
             kwargs={"chat_id": chat["id"]},
             key=f"button_chat_{chat['id']}",
             type="tertiary",
-            use_container_width=True,
         )
