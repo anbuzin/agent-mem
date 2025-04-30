@@ -123,6 +123,8 @@ async def create_chat() -> uuid.UUID:
 
 @app.post("/message")
 async def handle_message(request: MessageRequest) -> StreamingResponse:
+    chat = await get_chat(request.chat_id)
+
     await gel_client.query(
         ADD_MESSAGE_QUERY,
         chat_id=request.chat_id,
@@ -130,16 +132,26 @@ async def handle_message(request: MessageRequest) -> StreamingResponse:
         content=request.message.content,
     )
 
+    async def stream_response():
+        full_response = ""
+        async with talker_agent.run_stream(
+            request.message.content, message_history=chat.to_pydantic_ai_messages()
+        ) as result:
+            async for text in result.stream_text(delta=True):
+                full_response += text
+                yield text
+
+        await gel_client.query(
+            ADD_MESSAGE_QUERY,
+            chat_id=request.chat_id,
+            role="assistant",
+            content=full_response,
+        )
+
     return StreamingResponse(
-        handle_streamed_llm_response(request.chat_id, fake_response_generator()),
+        stream_response(),
         media_type="text/plain",
     )
-
-
-async def fake_response_generator():
-    for word in "This is a test response, it's a long response".split():
-        yield word + " "
-        await asyncio.sleep(0.05)
 
 
 ADD_MESSAGE_QUERY = """
@@ -158,18 +170,3 @@ ADD_MESSAGE_QUERY = """
     }
 """
 
-
-async def handle_streamed_llm_response(
-    chat_id: uuid.UUID, generator: AsyncGenerator[str, None]
-):
-    full_response = ""
-    async for chunk in generator:
-        full_response += chunk
-        yield chunk
-
-    await gel_client.query(
-        ADD_MESSAGE_QUERY,
-        chat_id=chat_id,
-        role="assistant",
-        content=full_response,
-    )
