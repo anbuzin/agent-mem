@@ -1,13 +1,17 @@
 import gel
-import asyncio
-import uuid
-from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from pydantic_ai import Agent
+from dotenv import load_dotenv
+import uuid
+import asyncio
+from typing import AsyncGenerator
+from agent_mem.common.types import CommonMessage, CommonChat
 
-from agent_mem.common.types import Chat, Message
+load_dotenv()
+
 
 app = FastAPI()
 app.add_middleware(
@@ -20,6 +24,10 @@ app.add_middleware(
 
 gel_client = gel.create_async_client()
 
+talker_agent = Agent("openai:gpt-4o-mini")
+summarizer_agent = Agent("openai:gpt-4o-mini")
+extractor_agent = Agent("openai:gpt-4o-mini")
+
 
 class SummarizeRequest(BaseModel):
     chat_id: str
@@ -29,7 +37,7 @@ class SummarizeRequest(BaseModel):
 
 class MessageRequest(BaseModel):
     chat_id: uuid.UUID
-    message: Message
+    message: CommonMessage
 
 
 @app.post("/summarize")
@@ -53,7 +61,7 @@ async def summarize(request: SummarizeRequest):
 
 
 @app.get("/chat/{chat_id}")
-async def get_chat(chat_id: uuid.UUID) -> Chat:
+async def get_chat(chat_id: uuid.UUID) -> CommonChat:
     result = await gel_client.query_single(
         """
         with 
@@ -76,11 +84,11 @@ async def get_chat(chat_id: uuid.UUID) -> Chat:
     """,
         chat_id=chat_id,
     )
-    return Chat.from_gel_result(result)
+    return CommonChat.from_gel_result(result)
 
 
 @app.get("/chats")
-async def get_chats() -> list[Chat]:
+async def get_chats() -> list[CommonChat]:
     result = await gel_client.query(
         """
         select Chat {
@@ -100,7 +108,7 @@ async def get_chats() -> list[Chat]:
         order by .created_at desc
         """
     )
-    return [Chat.from_gel_result(chat) for chat in result]
+    return [CommonChat.from_gel_result(chat) for chat in result]
 
 
 @app.post("/chat")
@@ -126,6 +134,7 @@ async def handle_message(request: MessageRequest) -> StreamingResponse:
         handle_streamed_llm_response(request.chat_id, fake_response_generator()),
         media_type="text/plain",
     )
+
 
 async def fake_response_generator():
     for word in "This is a test response, it's a long response".split():
@@ -164,5 +173,3 @@ async def handle_streamed_llm_response(
         role="assistant",
         content=full_response,
     )
-
-

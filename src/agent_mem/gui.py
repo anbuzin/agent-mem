@@ -2,8 +2,6 @@ import streamlit as st
 import httpx
 import uuid
 
-from agent_mem.common.types import Message, Chat
-
 
 API_URL = "http://127.0.0.1:8000"
 
