@@ -1,6 +1,10 @@
 module default {
     global summary_threshold: int64 {
-        default := 3;
+        default := 5;
+    };
+
+    global num_messages_to_leave: int64 {
+        default := 2;
     };
 
     type Message {
@@ -27,16 +31,27 @@ module default {
         );
         
         trigger summarize after insert, update for each do (
-            with cutoff_messages := (
-                select __new__.history order by .created_at desc limit global summary_threshold
+            with remaining_messages := (
+                select __new__.history 
+                order by .created_at desc 
+                limit global num_messages_to_leave
             ),
-            cutoff := (
-                select cutoff_messages limit 1
-            ).created_at,
+            last_message := (
+                select remaining_messages 
+                order by .created_at desc 
+                limit 1
+            ),
+            cutoff_message := (
+                select remaining_messages 
+                order by .created_at asc 
+                limit 1
+            ),
             select request_summary(
                 __new__.id,
-                assert_exists(cutoff)
-            ) if (count(__new__.history) > global summary_threshold)
+                assert_exists(cutoff_message.created_at)
+            ) if 
+                (count(__new__.history) > global summary_threshold)
+                and last_message.llm_role = "assistant"
             else {}
         )
     }
@@ -45,7 +60,15 @@ module default {
     using (
         with 
             chat := assert_exists((select Chat filter .id = chat_id)),
-            messages := (select chat.history filter .created_at <= cutoff),
+            messages := (
+                select chat.history 
+                filter .created_at < cutoff
+            ),
+            summary_datetime := (
+                select messages.created_at
+                order by messages.created_at desc
+                limit 1
+            ),
             messages_body := array_agg((
                 select messages.body
                 order by messages.created_at
@@ -60,30 +83,37 @@ module default {
                         {
                             ("chat_id", <json>chat_id),
                             ("messages", <json>messages_body),
-                            ("cutoff", <json>cutoff)
+                            ("cutoff", <json>cutoff),
+                            ("summary_datetime", <json>summary_datetime)
                         }
                     )
                 )
             )
-        )
+        ) 
     );
 
-    function insert_summary(chat_id: uuid, summary: str, cutoff: datetime) -> Chat 
-    using (
+    function insert_summary(
+        chat_id: uuid, 
+        cutoff: datetime, 
+        summary: str, 
+        summary_datetime: datetime
+    ) -> Chat using (
         with 
             chat := assert_exists((select Chat filter .id = chat_id)),
             evicted_messages := (
                 update chat.archive 
-                filter .created_at <= cutoff 
+                filter .created_at < cutoff 
                 set {
                     is_evicted := true
                 } 
             ),
-            summary_message := (insert Message {
-                llm_role := "system",
-                body := summary,
-                created_at := cutoff,
-            }),
+            summary_message := (
+                insert Message {
+                    llm_role := "system",
+                    body := summary,
+                    created_at := summary_datetime,
+                }
+            ),
         update chat set {
             archive := distinct (.archive union summary_message)
         } 

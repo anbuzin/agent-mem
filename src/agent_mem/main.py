@@ -5,9 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from dotenv import load_dotenv
+
 import uuid
-import asyncio
-from typing import AsyncGenerator
+
 from agent_mem.common.types import CommonMessage, CommonChat
 
 load_dotenv()
@@ -33,6 +33,7 @@ class SummarizeRequest(BaseModel):
     chat_id: str
     messages: list[str]
     cutoff: str
+    summary_datetime: str
 
 
 class MessageRequest(BaseModel):
@@ -44,20 +45,34 @@ class MessageRequest(BaseModel):
 async def summarize(request: SummarizeRequest):
     print(f"Summarizing messages: {request}")
 
+    formatted_messages = "\n\n".join([m for m in request.messages])
+
+    response = await summarizer_agent.run(
+        f"""
+        Summarize the following messages:
+        {formatted_messages}
+        Only respond with the summary, no other text.
+        """
+    )
+
+    summary = response.output
+
     await gel_client.query(
         """
         select insert_summary(
             <uuid>$chat_id,
+            <datetime><str>$cutoff,
             <str>$summary,
-            <datetime><str>$cutoff
+            <datetime><str>$summary_datetime
         )
         """,
         chat_id=request.chat_id,
-        summary="This is a summary",
         cutoff=request.cutoff,
+        summary=summary,
+        summary_datetime=request.summary_datetime,
     )
 
-    return {"summary": "This is a test summary"}
+    return {"summary": summary}
 
 
 @app.get("/chat/{chat_id}")
