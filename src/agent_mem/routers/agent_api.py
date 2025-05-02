@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from agent_mem.db import get_gel
-from agent_mem.agents import get_summarizer_agent
+from agent_mem.agents.summarizer import get_summarizer_agent
 
 router = APIRouter()
 

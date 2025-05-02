@@ -1,115 +1,91 @@
-# Create a Chat with a conversation about programming
+# Create a Chat with Morgan Freeman about sandwiches
 with
-  msg1 := (
-    insert Message {
-      llm_role := "user",
-      body := "Can you help me with Python generators?",
-      created_at := <datetime>'2023-09-12T14:30:00Z'
-    }
-  ),
-  msg2 := (
-    insert Message {
-      llm_role := "assistant",
-      body := "Sure! Python generators are functions that use the yield statement to return values one at a time. They're memory-efficient for working with large datasets.",
-      created_at := <datetime>'2023-09-12T14:30:15Z'
-    }
-  ),
-  msg3 := (
-    insert Message {
-      llm_role := "user",
-      body := "Can you show me an example?",
-      created_at := <datetime>'2023-09-12T14:31:00Z'
-    }
-  ),
-  msg4 := (
-    insert Message {
-      llm_role := "assistant",
-      body := "Here's a simple generator example:\n\ndef count_up_to(max):\n    count = 1\n    while count <= max:\n        yield count\n        count += 1\n\n# Using the generator\nfor number in count_up_to(5):\n    print(number)",
-      created_at := <datetime>'2023-09-12T14:31:30Z'
-    }
-  )
+    msg1 := (
+        insert Message {
+            llm_role := "user",
+            body := "Hello, I'm Morgan Freeman. I've been thinking about making the perfect sandwich for lunch. Any suggestions?",
+            created_at := <datetime>'2023-10-15T12:30:00Z'
+        }
+    ),
+    msg2 := (
+        insert Message {
+            llm_role := "assistant",
+            body := "Hello Mr. Freeman! For someone with your refined taste, I'd suggest a classic club sandwich with a twist - perhaps adding avocado and a honey mustard aioli that complements your deep, resonant voice.",
+            created_at := <datetime>'2023-10-15T12:30:20Z'
+        }
+    ),
+    msg3 := (
+        insert Message {
+            llm_role := "user",
+            body := "That sounds delightful. You know, I once narrated a documentary about bread, but they cut all my scenes. Do you think sourdough or rye would work better for this sandwich?",
+            created_at := <datetime>'2023-10-15T12:31:05Z'
+        }
+    ),
+    msg4 := (
+        insert Message {
+            llm_role := "assistant",
+            body := "What a shame about that documentary, Mr. Freeman! Your voice would've made bread sound truly epic. For your sandwich, I'd recommend sourdough - its tangy profile would create a beautiful harmony with the honey mustard aioli, much like how your narration brings depth to any story.",
+            created_at := <datetime>'2023-10-15T12:31:40Z'
+        }
+    )
 insert Chat {
-  title := "Python generators",
-  archive := {msg1, msg2, msg3, msg4}
+    title := "Perfect sandwich",
+    archive := {msg1, msg2, msg3, msg4}
 };
 
-# Create another Chat with summarization example
+# Create facts about Morgan Freeman
 with
-  msg1 := (
-    insert Message {
-      llm_role := "user",
-      body := "What are the benefits of AI for business?",
-      created_at := <datetime>'2023-09-15T10:00:00Z'
-    }
-  ),
-  msg2 := (
-    insert Message {
-      llm_role := "assistant",
-      body := "AI offers numerous benefits for businesses, including automation of repetitive tasks, improved decision-making through data analysis, enhanced customer experiences with chatbots, predictive maintenance, and personalized marketing.",
-      created_at := <datetime>'2023-09-15T10:00:20Z'
-    }
-  ),
-  msg3 := (
-    insert Message {
-      llm_role := "user",
-      body := "Are there any risks?",
-      created_at := <datetime>'2023-09-15T10:01:00Z'
-    }
-  ),
-  msg4 := (
-    insert Message {
-      llm_role := "assistant",
-      body := "Yes, there are risks associated with AI implementation in business: potential job displacement, ethical concerns about bias and fairness, data privacy issues, security vulnerabilities, and dependency on AI systems that may be difficult to explain or debug.",
-      created_at := <datetime>'2023-09-15T10:01:30Z'
-    }
-  ),
-  # Example of a summary message (typically added by the insert_summary function)
-  summary := (
-    insert Message {
-      llm_role := "system",
-      body := "Conversation about AI benefits (automation, decision-making, customer experience) and risks (job displacement, ethics, privacy) for business.",
-      created_at := <datetime>'2023-09-15T10:02:00Z'
-    }
-  ),
-  # Example of evicted messages (typically managed by the insert_summary function)
-  msg1_evicted := (
-    insert Message {
-      llm_role := "user",
-      body := "What are the benefits of AI for business?",
-      created_at := <datetime>'2023-09-15T10:00:00Z',
-      is_evicted := true
-    }
-  ),
-  msg2_evicted := (
-    insert Message {
-      llm_role := "assistant",
-      body := "AI offers numerous benefits for businesses, including automation of repetitive tasks, improved decision-making through data analysis, enhanced customer experiences with chatbots, predictive maintenance, and personalized marketing.",
-      created_at := <datetime>'2023-09-15T10:00:20Z',
-      is_evicted := true
-    }
-  )
-insert Chat {
-  title := "AI benefits and risks",
-  archive := {msg1_evicted, msg2_evicted, msg3, msg4, summary}
+    msg := (
+        insert Message {
+            llm_role := "system",
+            body := "Extracting facts about Morgan Freeman from conversation history",
+            created_at := <datetime>'2023-10-15T12:35:00Z'
+        }
+    )
+insert Fact {
+    key := "morgan_freeman_unusual_hobby",
+    value := "Morgan Freeman keeps a sanctuary of 26 alpacas that he personally shears to make custom sweaters for penguins at the local zoo",
+    from_message := msg
 };
 
-# Simple chat with a single exchange
-with
-  msg1 := (
-    insert Message {
-      llm_role := "user",
-      body := "What's the weather today?",
-      created_at := <datetime>'2023-09-18T08:15:00Z'
-    }
-  ),
-  msg2 := (
-    insert Message {
-      llm_role := "assistant",
-      body := "I don't have access to real-time weather data. You would need to check a weather service or app for current conditions in your location.",
-      created_at := <datetime>'2023-09-18T08:15:10Z'
-    }
-  )
-insert Chat {
-  title := "Weather",
-  archive := {msg1, msg2}
+insert Fact {
+    key := "morgan_freeman_daily_ritual",
+    value := "Morgan Freeman starts each day by practicing yodeling for exactly 17 minutes to maintain his iconic voice",
+    from_message := (select Message filter .body = "Extracting facts about Morgan Freeman from conversation history" limit 1)
+};
+
+# Create prompt preferences for Morgan Freeman
+with 
+    msg := (
+        insert Message {
+            llm_role := "system",
+            body := "Recording Morgan Freeman's prompt preferences",
+            created_at := <datetime>'2023-10-15T12:40:00Z'
+        }
+    )
+insert Prompt {
+    key := "narration_style",
+    value := "Please narrate all your responses as if you're describing a penguin trying to open a jar of pickles",
+    from_message := msg
+};
+
+insert Prompt {
+    key := "voice_requirement",
+    value := "End every third sentence with 'and that's how the cookie crumbles' in a deep, resonant tone",
+    from_message := (select Message filter .body = "Recording Morgan Freeman's prompt preferences" limit 1)
+};
+
+insert Prompt {
+    key := "greeting_format",
+    value := "Always address Morgan Freeman as 'Supreme Commander of Sandwich Kingdom'",
+    from_message := (select Message filter .body = "Recording Morgan Freeman's prompt preferences" limit 1)
+};
+
+# Create bizarre sandwich resources
+insert Resource {
+    body := "The psychology of sandwich cutting suggests that individuals who cut their sandwiches diagonally have a 73% higher capacity for abstract thought, while those who refuse to cut their sandwiches at all show remarkable resistance to peer pressure but struggle with commitment in romantic relationships."
+};
+
+insert Resource {
+    body := "The world's most expensive sandwich, created by chef Xander Quill in 2021, contains edible gold leaf, beluga caviar, and a special mustard fermented in the soundwaves of whale songs. At $4,850 per serving, each sandwich comes with a certificate of authenticity and a small music box that plays a custom composition based on the molecular structure of its ingredients."
 };

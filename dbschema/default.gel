@@ -1,3 +1,5 @@
+using extension ai;
+
 module default {
     global summary_threshold: int64 {
         default := 5;
@@ -118,4 +120,34 @@ module default {
             archive := distinct (.archive union summary_message)
         } 
     );
+
+    type Fact {
+        key: str {
+            constraint exclusive;
+        }
+        value: str;
+        body := .key ++ ": " ++ .value;
+        from_message: Message;
+
+        deferred index ext::ai::index(
+            embedding_model := "text-embedding-3-small"
+        ) on (.key ++ ": " ++ .value);
+    }
+
+    type Prompt {
+        key: str {
+            constraint exclusive;
+        };
+        value: str;
+        body := .key ++ ": " ++ .value;
+        from_message: Message;
+    }
+
+    type Resource {
+        body: str;
+
+        deferred index ext::ai::index(
+            embedding_model := "text-embedding-3-small"
+        ) on (.body);
+    }
 }

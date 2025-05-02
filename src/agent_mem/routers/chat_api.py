@@ -6,7 +6,7 @@ import uuid
 
 from agent_mem.common.types import CommonChat, CommonMessage
 from agent_mem.db import get_gel
-from agent_mem.agents import get_talker_agent
+from agent_mem.agents.talker import get_talker_agent, TalkerSystemPrompt
 
 
 ADD_MESSAGE_QUERY = """
@@ -110,10 +110,29 @@ async def handle_message(
         content=request.message.content,
     )
 
+    user_facts = await gel_client.query(
+        """
+        select Fact.body 
+        limit 5;
+        """
+    )
+
+    behavior_prompt = await gel_client.query(
+        """
+        select Prompt.body
+        """
+    )
+
     async def stream_response():
         full_response = ""
+
         async with talker_agent.run_stream(
-            request.message.content, message_history=chat.to_pydantic_ai_messages()
+            request.message.content, 
+            message_history=chat.to_pydantic_ai_messages(),
+            deps=TalkerSystemPrompt(
+                user_facts=user_facts,
+                behavior_prompt=behavior_prompt,
+            ),
         ) as result:
             async for text in result.stream_text(delta=True):
                 full_response += text
