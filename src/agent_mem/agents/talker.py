@@ -2,12 +2,12 @@ from pydantic_ai import Agent, RunContext
 from pydantic import BaseModel
 
 
-class TalkerSystemPrompt(BaseModel):
+class TalkerContext(BaseModel):
     user_facts: list[str]
     behavior_prompt: list[str]
 
 
-agent = Agent("openai:gpt-4o-mini", deps_type=TalkerSystemPrompt)
+agent = Agent("openai:gpt-4o-mini", deps_type=TalkerContext)
 
 
 PROMPT_TEMPLATE = """
@@ -22,7 +22,7 @@ You need to follow these behavior preferences:
 
 
 @agent.system_prompt
-def get_system_prompt(context: RunContext[TalkerSystemPrompt]):
+def get_system_prompt(context: RunContext[TalkerContext]):
     return PROMPT_TEMPLATE.format(
         user_facts="\n".join(context.deps.user_facts),
         behavior_prompt=context.deps.behavior_prompt,

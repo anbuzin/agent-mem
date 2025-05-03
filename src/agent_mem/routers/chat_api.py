@@ -6,8 +6,8 @@ import uuid
 
 from agent_mem.common.types import CommonChat, CommonMessage
 from agent_mem.db import get_gel
-from agent_mem.agents.talker import get_talker_agent, TalkerSystemPrompt
-
+from agent_mem.agents.talker import get_talker_agent, TalkerContext
+from agent_mem.agents.extractor import get_extractor_agent, ExtractorContext
 
 ADD_MESSAGE_QUERY = """
     with chat := (
@@ -99,6 +99,7 @@ async def create_chat(gel_client=Depends(get_gel)) -> uuid.UUID:
 async def handle_message(
     request: MessageRequest,
     talker_agent=Depends(get_talker_agent),
+    extractor_agent=Depends(get_extractor_agent),
     gel_client=Depends(get_gel),
 ) -> StreamingResponse:
     chat = await get_chat(request.chat_id, gel_client)
@@ -108,6 +109,30 @@ async def handle_message(
         chat_id=request.chat_id,
         role=request.message.role,
         content=request.message.content,
+    )
+
+    user_facts = await gel_client.query(
+        """
+        select Fact.body 
+        """
+    )
+
+    behavior_prompt = await gel_client.query(
+        """
+        select Prompt.body
+        """
+    )
+
+    await extractor_agent.run(
+        f"""
+        Extract facts and behavior preferences from the following message:
+        {request.message.content}
+        """,
+        deps=ExtractorContext(
+            gel_client=gel_client,
+            user_facts=user_facts,
+            behavior_preferences=behavior_prompt,
+        ),
     )
 
     user_facts = await gel_client.query(
@@ -127,9 +152,9 @@ async def handle_message(
         full_response = ""
 
         async with talker_agent.run_stream(
-            request.message.content, 
+            request.message.content,
             message_history=chat.to_pydantic_ai_messages(),
-            deps=TalkerSystemPrompt(
+            deps=TalkerContext(
                 user_facts=user_facts,
                 behavior_prompt=behavior_prompt,
             ),
@@ -144,6 +169,8 @@ async def handle_message(
             role="assistant",
             content=full_response,
         )
+
+        print(result.all_messages())
 
     return StreamingResponse(
         stream_response(),

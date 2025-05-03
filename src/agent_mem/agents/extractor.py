@@ -1,20 +1,30 @@
 from pydantic_ai import Agent, RunContext
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from gel import AsyncIOClient
-from agent_mem.common.types import CommonMessage
 
 
 class ExtractorContext(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     gel_client: AsyncIOClient
-    message: CommonMessage
+    user_facts: list[str]
+    behavior_preferences: list[str]
 
 
 agent = Agent("openai:gpt-4o-mini", deps_type=ExtractorContext)
 
 
 @agent.system_prompt
-async def get_system_prompt():
-    return "You are a helpful assistant that can answer questions and help with tasks."
+async def get_system_prompt(context: RunContext[ExtractorContext]):
+    return f"""
+    You are an agent that can extract facts about a user from their messages.
+    The following facts are already known:
+    {context.deps.user_facts}
+    You can also extract agent behavior preferences that user expresses.
+    The following preferences are already known:
+    {context.deps.behavior_preferences}
+    If no infomation can be extracted, simply quit.
+    """
 
 
 @agent.tool
@@ -24,23 +34,18 @@ async def upsert_fact(context: RunContext[ExtractorContext], key: str, value: st
         with
             key := <str>$key,
             value := <str>$value,
-            message := (
-                select Message filter .id = <uuid>$message_id
-            )
+
         insert Fact {
             key := key,
             value := value,
-            from_message := message
-        } unless conflict on .key else {
+        } unless conflict on .key else (
             update Fact filter .key = key set {
                 value := value,
-                from_message := message
             }
-        }
+        )
         """,
         key=key,
         value=value,
-        message_id=context.message.id,
     )
 
 
@@ -61,23 +66,17 @@ async def upsert_prompt(context: RunContext[ExtractorContext], key: str, value: 
         with 
             key := <str>$key,
             value := <str>$value,
-            message := (    
-                select Message filter .id = <uuid>$message_id
-            )
         insert Prompt {
             key := key,
             value := value,
-            from_message := message
-        } unless conflict on .key else {
+        } unless conflict on .key else (
             update Prompt filter .key = key set {
                 value := value,
-                from_message := message
             }
-        }
+        )
         """,
         key=key,
         value=value,
-        message_id=context.message.id,
     )
 
 
@@ -91,6 +90,5 @@ async def delete_prompt(context: RunContext[ExtractorContext], key: str):
     )
 
 
-@agent.tool
 async def get_extractor_agent() -> Agent:
     return agent
