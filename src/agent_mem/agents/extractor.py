@@ -5,10 +5,7 @@ from gel import AsyncIOClient
 
 class ExtractorContext(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-
     gel_client: AsyncIOClient
-    user_facts: list[str]
-    behavior_preferences: list[str]
 
 
 agent = Agent("openai:gpt-4o-mini", deps_type=ExtractorContext)
@@ -16,13 +13,25 @@ agent = Agent("openai:gpt-4o-mini", deps_type=ExtractorContext)
 
 @agent.system_prompt
 async def get_system_prompt(context: RunContext[ExtractorContext]):
+    user_facts = await context.deps.gel_client.query(
+        """
+        select Fact.body
+        """
+    )
+
+    behavior_prompt = await context.deps.gel_client.query(
+        """
+        select Prompt.body
+        """
+    )
+
     return f"""
     You are an agent that can extract facts about a user from their messages.
     The following facts are already known:
-    {context.deps.user_facts}
+    {user_facts}
     You can also extract agent behavior preferences that user expresses.
     The following preferences are already known:
-    {context.deps.behavior_preferences}
+    {behavior_prompt}
     If no infomation can be extracted, simply quit.
     """
 

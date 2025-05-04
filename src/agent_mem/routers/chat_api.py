@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from pydantic_ai import Agent
+from gel import AsyncIOClient
 
 import uuid
 
@@ -98,30 +100,11 @@ async def create_chat(gel_client=Depends(get_gel)) -> uuid.UUID:
 @router.post("/message")
 async def handle_message(
     request: MessageRequest,
-    talker_agent=Depends(get_talker_agent),
-    extractor_agent=Depends(get_extractor_agent),
-    gel_client=Depends(get_gel),
+    talker_agent: Agent = Depends(get_talker_agent),
+    extractor_agent: Agent = Depends(get_extractor_agent),
+    gel_client: AsyncIOClient = Depends(get_gel),
 ) -> StreamingResponse:
     chat = await get_chat(request.chat_id, gel_client)
-
-    await gel_client.query(
-        ADD_MESSAGE_QUERY,
-        chat_id=request.chat_id,
-        role=request.message.role,
-        content=request.message.content,
-    )
-
-    user_facts = await gel_client.query(
-        """
-        select Fact.body 
-        """
-    )
-
-    behavior_prompt = await gel_client.query(
-        """
-        select Prompt.body
-        """
-    )
 
     await extractor_agent.run(
         f"""
@@ -130,8 +113,6 @@ async def handle_message(
         """,
         deps=ExtractorContext(
             gel_client=gel_client,
-            user_facts=user_facts,
-            behavior_preferences=behavior_prompt,
         ),
     )
 
@@ -163,14 +144,15 @@ async def handle_message(
                 full_response += text
                 yield text
 
-        await gel_client.query(
-            ADD_MESSAGE_QUERY,
-            chat_id=request.chat_id,
-            role="assistant",
-            content=full_response,
-        )
-
-        print(result.all_messages())
+        for message in result.new_messages():
+            for part in message.parts:
+                common_message = CommonMessage.from_pydantic_ai_message_part(part)
+                await gel_client.query(
+                    ADD_MESSAGE_QUERY,
+                    chat_id=request.chat_id,
+                    role=common_message.role,
+                    content=common_message.content,
+                )
 
     return StreamingResponse(
         stream_response(),
