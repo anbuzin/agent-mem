@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from gel import AsyncIOClient
+import gel.ai
 
 import uuid
 
@@ -116,11 +117,26 @@ async def handle_message(
         ),
     )
 
+    # Create a RAG client and generate embeddings for the user's message
+    gel_ai_client = gel.ai.create_rag_client(gel_client, model="gpt-4o-mini")
+    embedding_vector = gel_ai_client.generate_embeddings(
+        request.message.content,
+        model="text-embedding-3-small",
+    )
+    
+    # Use vector search to find relevant facts
     user_facts = await gel_client.query(
         """
-        select Fact.body 
-        limit 5;
-        """
+        with 
+            vector_search := ext::ai::search(Fact, <array<float32>>$embedding_vector),
+            facts := (
+                select vector_search.object
+                order by vector_search.distance asc 
+                limit 5
+            )
+        select facts.body
+        """,
+        embedding_vector=embedding_vector,
     )
 
     behavior_prompt = await gel_client.query(
