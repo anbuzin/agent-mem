@@ -2,19 +2,32 @@ from pydantic import BaseModel, Field
 import uuid
 import datetime
 from pydantic_ai.messages import ModelMessage
-from pydantic_ai.messages import SystemPromptPart, UserPromptPart, TextPart
+from pydantic_ai.messages import (
+    SystemPromptPart,
+    UserPromptPart,
+    TextPart,
+    ToolReturnPart,
+    RetryPromptPart,
+    ToolCallPart,
+)
 from pydantic_ai.messages import ModelRequest, ModelResponse
 
 
 class CommonMessage(BaseModel):
     role: str
-    content: str
+    content: str | None = None
+    tool_name: str | None = None
+    tool_args: dict | None = None
     created_at: datetime.datetime | None = None
 
     @classmethod
     def from_gel_result(cls, result: dict):
         return cls(
-            role=result.llm_role, content=result.body, created_at=result.created_at
+            role=result.llm_role,
+            content=result.body,
+            tool_name=result.tool_name,
+            tool_args=result.tool_args,
+            created_at=result.created_at,
         )
 
     @classmethod
@@ -26,12 +39,31 @@ class CommonMessage(BaseModel):
                 role = "user"
             case "text":
                 role = "assistant"
+            case "tool-return":
+                role = "tool-return"
+            case "retry-prompt":
+                role = "retry-prompt"
+            case "tool-call":
+                role = "tool-call"
             case _:
                 role = "unknown"
 
+        if hasattr(message, "content"):
+            if isinstance(message.content, str):
+                content = message.content
+            elif isinstance(message.content, list):
+                content = "\n".join([part for part in message.content])
+        else:
+            content = None
+
+        tool_name = message.tool_name if hasattr(message, "tool_name") else None
+        tool_args = message.tool_args if hasattr(message, "tool_args") else None
+
         return cls(
             role=role,
-            content=message.content,
+            content=content,
+            tool_name=tool_name,
+            tool_args=tool_args,
             created_at=message.timestamp if hasattr(message, "timestamp") else None,
         )
 
@@ -45,8 +77,13 @@ class CommonMessage(BaseModel):
                 return UserPromptPart(content=self.content, timestamp=self.created_at)
             case "assistant":
                 return TextPart(content=self.content)
+            case "tool-return":
+                return ToolReturnPart(content=self.content)
+            case "retry-prompt":
+                return RetryPromptPart(content=self.content)
+            case "tool-call":
+                return ToolCallPart(content=self.content)
             case _:
-                # Default fallback for unknown roles
                 return UserPromptPart(
                     content=f"[Unknown role message: {self.content}]",
                     timestamp=self.created_at,
