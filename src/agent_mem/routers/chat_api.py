@@ -12,6 +12,7 @@ from agent_mem.db import get_gel
 from agent_mem.agents.talker import get_talker_agent, TalkerContext
 from agent_mem.agents.extractor import get_extractor_agent, ExtractorContext
 
+
 ADD_MESSAGE_QUERY = """
     with chat := (
         select Chat filter .id = <uuid>$chat_id
@@ -19,7 +20,9 @@ ADD_MESSAGE_QUERY = """
     new_message := (
         insert Message {
             llm_role := <str>$role,
-            body := <str>$content,
+            body := <optional str>$content,
+            tool_name := <optional str>$tool_name,
+            tool_args := <optional json>$tool_args,
         }
     )
     update chat
@@ -50,11 +53,15 @@ async def get_chat(chat_id: uuid.UUID, gel_client=Depends(get_gel)) -> CommonCha
         archive: {
             llm_role,
             body,
+            tool_name,
+            tool_args,
             created_at
         } order by .created_at,
         history: {
             llm_role,
             body,
+            tool_name,
+            tool_args,
             created_at
         } order by .created_at
     }
@@ -74,11 +81,15 @@ async def get_chats(gel_client=Depends(get_gel)) -> list[CommonChat]:
             history: {
                 llm_role,
                 body,
+                tool_name,
+                tool_args,
                 created_at
             } order by .created_at,
             archive: {
                 llm_role,
                 body,
+                tool_name,
+                tool_args,
                 created_at
             } order by .created_at
         }
@@ -107,51 +118,58 @@ async def handle_message(
 ) -> StreamingResponse:
     chat = await get_chat(request.chat_id, gel_client)
 
-    await extractor_agent.run(
-        f"""
-        Extract facts and behavior preferences from the following message:
-        {request.message.content}
-        """,
-        deps=ExtractorContext(
-            gel_client=gel_client,
-        ),
-    )
 
-    # Create a RAG client and generate embeddings for the user's message
-    gel_ai_client = gel.ai.create_rag_client(gel_client, model="gpt-4o-mini")
-    embedding_vector = gel_ai_client.generate_embeddings(
-        request.message.content,
-        model="text-embedding-3-small",
-    )
-    
-    # Use vector search to find relevant facts
-    user_facts = await gel_client.query(
-        """
-        with 
-            vector_search := ext::ai::search(Fact, <array<float32>>$embedding_vector),
-            facts := (
-                select vector_search.object
-                order by vector_search.distance asc 
-                limit 5
-            )
-        select facts.body
-        """,
-        embedding_vector=embedding_vector,
-    )
-
-    behavior_prompt = await gel_client.query(
-        """
-        select Prompt.body
-        """
-    )
 
     async def stream_response():
         full_response = ""
+
+        yield "*Running extractor...*\n"
+
+        await extractor_agent.run(
+            f"""
+            Extract facts and behavior preferences from the following message:
+            {request.message.content}
+            """,
+            deps=ExtractorContext(
+                gel_client=gel_client,
+            ),
+        )
+
+        yield "*Fetching facts...*\n"
+
+        gel_ai_client = await gel.ai.create_async_rag_client(gel_client, model="gpt-4o-mini")
+        embedding_vector = await gel_ai_client.generate_embeddings(
+            request.message.content,
+            model="text-embedding-3-small",
+        )
+        
+        user_facts = await gel_client.query(
+            """
+            with 
+                vector_search := ext::ai::search(Fact, <array<float32>>$embedding_vector),
+                facts := (
+                    select vector_search.object
+                    order by vector_search.distance asc 
+                    limit 5
+                )
+            select facts.body
+            """,
+            embedding_vector=embedding_vector,
+        )
+
+        behavior_prompt = await gel_client.query(
+            """
+            select Prompt.body
+            """
+        )
+
+        yield "*Gathering context...*\n"
 
         async with talker_agent.run_stream(
             request.message.content,
             message_history=chat.to_pydantic_ai_messages(),
             deps=TalkerContext(
+                gel_client=gel_client,
                 user_facts=user_facts,
                 behavior_prompt=behavior_prompt,
             ),
@@ -168,6 +186,8 @@ async def handle_message(
                     chat_id=request.chat_id,
                     role=common_message.role,
                     content=common_message.content,
+                    tool_name=common_message.tool_name,
+                    tool_args=common_message.tool_args,
                 )
 
     return StreamingResponse(

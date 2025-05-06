@@ -12,6 +12,8 @@ module default {
     type Message {
         llm_role: str;
         body: str;
+        tool_name: str;
+        tool_args: json;
         created_at: datetime {
             default := datetime_current();
         };
