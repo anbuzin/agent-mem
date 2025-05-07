@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from gel import AsyncIOClient
-# import gel.ai
+import gel.ai
 
 import uuid
 import json
@@ -101,33 +101,33 @@ async def handle_message(
     async def stream_response():
         yield "*Fetching facts...*\n"
 
-        # gel_ai_client = await gel.ai.create_async_rag_client(
-        #     gel_client, model="gpt-4o-mini"
-        # )
-        # embedding_vector = await gel_ai_client.generate_embeddings(
-        #     request.message.content,
-        #     model="text-embedding-3-small",
-        # )
-
-        # user_facts = await gel_client.query(
-        #     """
-        #     with
-        #         vector_search := ext::ai::search(Fact, <array<float32>>$embedding_vector),
-        #         facts := (
-        #             select vector_search.object
-        #             order by vector_search.distance asc
-        #             limit 5
-        #         )
-        #     select facts.body
-        #     """,
-        #     embedding_vector=embedding_vector,
-        # )
+        gel_ai_client = await gel.ai.create_async_rag_client(
+            gel_client, model="gpt-4o-mini"
+        )
+        embedding_vector = await gel_ai_client.generate_embeddings(
+            request.message.content,
+            model="text-embedding-3-small",
+        )
 
         user_facts = await gel_client.query(
             """
-            select Fact.body
-            """
+            with
+                vector_search := ext::ai::search(Fact, <array<float32>>$embedding_vector),
+                facts := (
+                    select vector_search.object
+                    order by vector_search.distance asc
+                    limit 5
+                )
+            select facts.body
+            """,
+            embedding_vector=embedding_vector,
         )
+
+        # user_facts = await gel_client.query(
+        #     """
+        #     select Fact.body
+        #     """
+        # )
 
         behavior_prompt = await gel_client.query(
             """
