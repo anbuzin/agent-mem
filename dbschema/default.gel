@@ -57,7 +57,24 @@ module default {
                 (count(__new__.history) > global summary_threshold)
                 and last_message.llm_role = "assistant"
             else {}
-        )
+        );
+
+        trigger extract after update for each do (
+            select net::http::schedule_request(
+                'http://127.0.0.1:8000/extract',
+                method := net::http::Method.POST,
+                headers := [('Content-Type', 'application/json')],
+                body := to_bytes(
+                    to_str(
+                        json_object_pack(
+                            {
+                                ("chat_id", <json>__new__.id),
+                            }
+                        )
+                    )
+                )
+            )
+        );
     }
 
     function request_summary(chat_id: uuid, cutoff: datetime) -> net::http::ScheduledRequest 

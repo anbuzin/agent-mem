@@ -3,33 +3,14 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from gel import AsyncIOClient
-import gel.ai
+# import gel.ai
 
 import uuid
+import json
 
+from agent_mem.agents.talker import get_talker_agent, TalkerContext
 from agent_mem.common.types import CommonChat, CommonMessage
 from agent_mem.db import get_gel
-from agent_mem.agents.talker import get_talker_agent, TalkerContext
-from agent_mem.agents.extractor import get_extractor_agent, ExtractorContext
-
-
-ADD_MESSAGE_QUERY = """
-    with chat := (
-        select Chat filter .id = <uuid>$chat_id
-    ),
-    new_message := (
-        insert Message {
-            llm_role := <str>$role,
-            body := <optional str>$content,
-            tool_name := <optional str>$tool_name,
-            tool_args := <optional json>$tool_args,
-        }
-    )
-    update chat
-    set {
-        archive := distinct (.archive union new_message)
-    }
-"""
 
 
 router = APIRouter()
@@ -113,48 +94,39 @@ async def create_chat(gel_client=Depends(get_gel)) -> uuid.UUID:
 async def handle_message(
     request: MessageRequest,
     talker_agent: Agent = Depends(get_talker_agent),
-    extractor_agent: Agent = Depends(get_extractor_agent),
     gel_client: AsyncIOClient = Depends(get_gel),
 ) -> StreamingResponse:
     chat = await get_chat(request.chat_id, gel_client)
 
-
-
     async def stream_response():
-        full_response = ""
-
-        yield "*Running extractor...*\n"
-
-        await extractor_agent.run(
-            f"""
-            Extract facts and behavior preferences from the following message:
-            {request.message.content}
-            """,
-            deps=ExtractorContext(
-                gel_client=gel_client,
-            ),
-        )
-
         yield "*Fetching facts...*\n"
 
-        gel_ai_client = await gel.ai.create_async_rag_client(gel_client, model="gpt-4o-mini")
-        embedding_vector = await gel_ai_client.generate_embeddings(
-            request.message.content,
-            model="text-embedding-3-small",
-        )
-        
+        # gel_ai_client = await gel.ai.create_async_rag_client(
+        #     gel_client, model="gpt-4o-mini"
+        # )
+        # embedding_vector = await gel_ai_client.generate_embeddings(
+        #     request.message.content,
+        #     model="text-embedding-3-small",
+        # )
+
+        # user_facts = await gel_client.query(
+        #     """
+        #     with
+        #         vector_search := ext::ai::search(Fact, <array<float32>>$embedding_vector),
+        #         facts := (
+        #             select vector_search.object
+        #             order by vector_search.distance asc
+        #             limit 5
+        #         )
+        #     select facts.body
+        #     """,
+        #     embedding_vector=embedding_vector,
+        # )
+
         user_facts = await gel_client.query(
             """
-            with 
-                vector_search := ext::ai::search(Fact, <array<float32>>$embedding_vector),
-                facts := (
-                    select vector_search.object
-                    order by vector_search.distance asc 
-                    limit 5
-                )
-            select facts.body
-            """,
-            embedding_vector=embedding_vector,
+            select Fact.body
+            """
         )
 
         behavior_prompt = await gel_client.query(
@@ -164,6 +136,8 @@ async def handle_message(
         )
 
         yield "*Gathering context...*\n"
+
+        full_response = ""
 
         async with talker_agent.run_stream(
             request.message.content,
@@ -178,17 +152,39 @@ async def handle_message(
                 full_response += text
                 yield text
 
+
+        new_messages = []
         for message in result.new_messages():
             for part in message.parts:
                 common_message = CommonMessage.from_pydantic_ai_message_part(part)
-                await gel_client.query(
-                    ADD_MESSAGE_QUERY,
-                    chat_id=request.chat_id,
-                    role=common_message.role,
-                    content=common_message.content,
-                    tool_name=common_message.tool_name,
-                    tool_args=common_message.tool_args,
+                new_messages.append(common_message.model_dump())
+
+        await gel_client.query(
+            """
+            with
+                messages_json := <json>$messages_json,
+                chat := assert_exists(
+                    (select Chat filter .id = <uuid>$chat_id)
+                ),
+                new_messages := (
+                    for raw_message in json_array_unpack(messages_json) 
+                    union (
+                        insert Message {
+                            llm_role := <str>raw_message['role'],
+                            body := <optional str>raw_message['content'],
+                            tool_name := <optional str>raw_message['tool_name'],
+                            tool_args := to_json(<optional str>raw_message['tool_args']),
+                        }
+                    )
                 )
+            update chat
+            set {
+                archive := distinct (.archive union new_messages)
+            }
+            """,
+            chat_id=request.chat_id,
+            messages_json=json.dumps(new_messages, default=str),
+        )
 
     return StreamingResponse(
         stream_response(),

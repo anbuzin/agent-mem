@@ -33,6 +33,8 @@ async def get_system_prompt(context: RunContext[ExtractorContext]):
     The following preferences are already known:
     {behavior_prompt}
     If no infomation can be extracted, simply quit.
+    Use available tools to save extracted information, the final text response
+    is not required and will be ignored.
     """
 
 
