@@ -75,6 +75,34 @@ module default {
                 )
             )
         );
+
+        trigger get_title after update for each do (
+            with
+                messages := (
+                    select __new__.history 
+                    order by .created_at asc 
+                ),
+                messages_body := array_agg((
+                    select messages.body
+                    order by messages.created_at
+                ))
+            select net::http::schedule_request(
+                'http://127.0.0.1:8000/get_title',
+                method := net::http::Method.POST,
+                headers := [('Content-Type', 'application/json')],
+                body := to_bytes(
+                    to_str(
+                        json_object_pack(
+                            {
+                                ("chat_id", <json>__new__.id),
+                                ("messages", <json>messages_body),
+                            }
+                        )
+                    )
+                )
+            ) if __new__.title = "Untitled"
+            else {}
+        )
     }
 
     function request_summary(chat_id: uuid, cutoff: datetime) -> net::http::ScheduledRequest 

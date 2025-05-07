@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+import httpx
+import os
 
 from agent_mem.db import get_gel
 from agent_mem.agents.summarizer import get_summarizer_agent
 from agent_mem.agents.extractor import get_extractor_agent, ExtractorContext
-from agent_mem.common.types import CommonMessage, CommonChat
+from agent_mem.common.types import CommonChat
 
 
 router = APIRouter()
@@ -106,3 +108,60 @@ async def extract(
     )
 
     return {"response": response.output}
+
+
+class GetTitleRequest(BaseModel):
+    chat_id: str
+    messages: list[str]
+
+
+@router.post("/get_title")
+async def get_title(
+    request: GetTitleRequest,
+    gel_client=Depends(get_gel),
+):
+    formatted_messages = "\n\n".join([m for m in request.messages])
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "system",
+                "content": "Generate a concise title (5 words or less) for the following conversation. Return only the title, no other text.",
+            },
+            {"role": "user", "content": formatted_messages},
+        ],
+        "max_tokens": 20,
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+
+    response.raise_for_status()
+    response_data = response.json()
+    title = response_data["choices"][0]["message"]["content"].strip()
+
+    await gel_client.query(
+        """
+        update Chat
+        filter .id = <uuid>$chat_id
+        set {
+            title := <str>$title
+        }
+        """,
+        chat_id=request.chat_id,
+        title=title,
+    )
+
+    return {"title": title}
