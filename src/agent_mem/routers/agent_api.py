@@ -25,8 +25,6 @@ async def summarize(
     summarizer_agent=Depends(get_summarizer_agent),
     gel_client=Depends(get_gel),
 ):
-    print(f"Summarizing messages: {request}")
-
     formatted_messages = "\n\n".join([m for m in request.messages])
 
     response = await summarizer_agent.run(
@@ -80,14 +78,16 @@ async def extract(
                 body,
                 tool_name,
                 tool_args,
-                created_at
+                created_at,
+                is_evicted
             } order by .created_at,
             history: {
                 llm_role,
                 body,
                 tool_name,
                 tool_args,
-                created_at
+                created_at,
+                is_evicted
             } order by .created_at
         }
         """,
@@ -119,38 +119,19 @@ class GetTitleRequest(BaseModel):
 async def get_title(
     request: GetTitleRequest,
     gel_client=Depends(get_gel),
+    summarizer_agent=Depends(get_summarizer_agent),
 ):
     formatted_messages = "\n\n".join([m for m in request.messages])
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+    response = await summarizer_agent.run(
+        f"""
+        Generate a concise descriptive title (5 words or less) for the following conversation.
+        {formatted_messages}
+        Only respond with the title, no other text.
+        """
+    )
 
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "system",
-                "content": "Generate a concise title (5 words or less) for the following conversation. Return only the title, no other text.",
-            },
-            {"role": "user", "content": formatted_messages},
-        ],
-        "max_tokens": 20,
-    }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-        )
-
-    response.raise_for_status()
-    response_data = response.json()
-    title = response_data["choices"][0]["message"]["content"].strip()
+    title = response.output
 
     await gel_client.query(
         """
