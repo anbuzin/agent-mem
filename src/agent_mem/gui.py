@@ -20,8 +20,12 @@ if not st.session_state.is_new_chat:
     chat = httpx.get(f"{API_URL}/chat/{st.session_state.chat_id}").json()
 
     st.session_state.messages = [
-        {"role": message["role"], "content": message["content"]}
-        for message in chat["history"]
+        {
+            "role": message["role"],
+            "content": message["content"],
+            "is_evicted": message["is_evicted"],
+        }
+        for message in chat["archive"]
     ]
 else:
     st.session_state.messages = []
@@ -31,7 +35,11 @@ st.title("Simple chat")
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        if message["is_evicted"]:
+            content = f":grey[{message['content']}]"
+        else:
+            content = message["content"]
+        st.markdown(content)
 
 if prompt := st.chat_input("What is up?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -52,7 +60,13 @@ if prompt := st.chat_input("What is up?"):
             },
         ) as response:
             answer = st.write_stream(response.iter_text())
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+    st.session_state.messages.append(
+        {
+            "role": "assistant",
+            "content": answer,
+            "is_evicted": False,
+        }
+    )
 
 
 chats = httpx.get(f"{API_URL}/chats").json()

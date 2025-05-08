@@ -19,6 +19,7 @@ class CommonMessage(BaseModel):
     tool_name: str | None = None
     tool_args: dict | None = None
     created_at: datetime.datetime | None = None
+    is_evicted: bool = False
 
     @classmethod
     def from_gel_result(cls, result: dict):
@@ -28,6 +29,7 @@ class CommonMessage(BaseModel):
             tool_name=result.tool_name,
             tool_args=result.tool_args,
             created_at=result.created_at,
+            is_evicted=result.is_evicted,
         )
 
     @classmethod

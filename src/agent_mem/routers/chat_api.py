@@ -36,14 +36,16 @@ async def get_chat(chat_id: uuid.UUID, gel_client=Depends(get_gel)) -> CommonCha
             body,
             tool_name,
             tool_args,
-            created_at
+            created_at,
+            is_evicted
         } order by .created_at,
         history: {
             llm_role,
             body,
             tool_name,
             tool_args,
-            created_at
+            created_at,
+            is_evicted
         } order by .created_at
     }
     """,
@@ -64,14 +66,16 @@ async def get_chats(gel_client=Depends(get_gel)) -> list[CommonChat]:
                 body,
                 tool_name,
                 tool_args,
-                created_at
+                created_at,
+                is_evicted
             } order by .created_at,
             archive: {
                 llm_role,
                 body,
                 tool_name,
                 tool_args,
-                created_at
+                created_at,
+                is_evicted
             } order by .created_at
         }
         order by .created_at desc
