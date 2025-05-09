@@ -1,4 +1,4 @@
-CREATE MIGRATION m1d3qolbbuunjhc442een6w5dqv4ca3o5ec33pnf56mdqkcyiocyya
+CREATE MIGRATION m1wyx65gw3ka2vs56xqr7ruxy54ibdwbtvlun2rmbjuqjksv4xfjza
     ONTO initial
 {
   CREATE EXTENSION pgvector VERSION '0.7';
@@ -12,6 +12,8 @@ CREATE MIGRATION m1d3qolbbuunjhc442een6w5dqv4ca3o5ec33pnf56mdqkcyiocyya
           SET default := (std::datetime_current());
       };
       CREATE PROPERTY llm_role: std::str;
+      CREATE PROPERTY tool_args: std::json;
+      CREATE PROPERTY tool_name: std::str;
   };
   CREATE TYPE default::Chat {
       CREATE MULTI LINK archive: default::Message;
@@ -20,12 +22,36 @@ CREATE MIGRATION m1d3qolbbuunjhc442een6w5dqv4ca3o5ec33pnf56mdqkcyiocyya
       FILTER
           NOT (.is_evicted)
       );
-      CREATE PROPERTY created_at: std::datetime {
-          SET default := (std::datetime_current());
-      };
       CREATE PROPERTY title: std::str {
           SET default := 'Untitled';
       };
+      CREATE TRIGGER get_title
+          AFTER UPDATE 
+          FOR EACH DO (WITH
+              messages := 
+                  (SELECT
+                      __new__.history
+                  ORDER BY
+                      .created_at ASC
+                  )
+              ,
+              messages_body := 
+                  std::array_agg((SELECT
+                      messages.body
+                  ORDER BY
+                      messages.created_at ASC
+                  ))
+          SELECT
+              (std::net::http::schedule_request('http://127.0.0.1:8000/get_title', method := std::net::http::Method.POST, headers := [('Content-Type', 'application/json')], body := std::to_bytes(std::to_str(std::json_object_pack({('chat_id', <std::json>__new__.id), ('messages', <std::json>messages_body)})))) IF (__new__.title = 'Untitled') ELSE {})
+          );
+      CREATE PROPERTY created_at: std::datetime {
+          SET default := (std::datetime_current());
+      };
+      CREATE TRIGGER extract
+          AFTER UPDATE 
+          FOR EACH DO (SELECT
+              std::net::http::schedule_request('http://127.0.0.1:8000/extract', method := std::net::http::Method.POST, headers := [('Content-Type', 'application/json')], body := std::to_bytes(std::to_str(std::json_object_pack({('chat_id', <std::json>__new__.id)}))))
+          );
   };
   CREATE FUNCTION default::request_summary(chat_id: std::uuid, cutoff: std::datetime) ->  std::net::http::ScheduledRequest USING (WITH
       chat := 
@@ -127,4 +153,25 @@ CREATE MIGRATION m1d3qolbbuunjhc442een6w5dqv4ca3o5ec33pnf56mdqkcyiocyya
           );
   };
   CREATE FUTURE simple_scoping;
+  CREATE TYPE default::Fact {
+      CREATE PROPERTY key: std::str {
+          CREATE CONSTRAINT std::exclusive;
+      };
+      CREATE PROPERTY value: std::str;
+      CREATE DEFERRED INDEX ext::ai::index(embedding_model := 'text-embedding-3-small') ON (((.key ++ ': ') ++ .value));
+      CREATE LINK from_message: default::Message;
+      CREATE PROPERTY body := (((.key ++ ': ') ++ .value));
+  };
+  CREATE TYPE default::Prompt {
+      CREATE LINK from_message: default::Message;
+      CREATE PROPERTY key: std::str {
+          CREATE CONSTRAINT std::exclusive;
+      };
+      CREATE PROPERTY value: std::str;
+      CREATE PROPERTY body := (((.key ++ ': ') ++ .value));
+  };
+  CREATE TYPE default::Resource {
+      CREATE PROPERTY body: std::str;
+      CREATE DEFERRED INDEX ext::ai::index(embedding_model := 'text-embedding-3-small') ON (.body);
+  };
 };
