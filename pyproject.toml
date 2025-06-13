@@ -9,7 +9,7 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.115.12",
-    "gel>=3.0.1",
+    "gel",
     "httpx>=0.28.1",
     "pydantic-ai>=0.1.8",
     "python-dotenv>=1.1.0",
@@ -22,3 +22,6 @@ agent-mem = "agent_mem:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv.sources]
+gel = { git = "https://github.com/geldata/gel-python.git" }
